@@ -20,6 +20,8 @@ import org.jetbrains.kotlin.fir.types.ProjectionKind.*
 import org.jetbrains.kotlin.fir.types.impl.ConeClassLikeTypeImpl
 import org.jetbrains.kotlin.fir.types.impl.ConeTypeParameterTypeImpl
 
+private val creatingPointers = ThreadLocal.withInitial<MutableSet<Any>> { mutableSetOf() }
+
 internal fun <T : ConeKotlinType> T.createPointer(builder: KaSymbolByFirBuilder): ConeTypePointer<T> {
     @Suppress("UNCHECKED_CAST")
     return when (this) {
@@ -142,7 +144,23 @@ private class ConeCapturedTypePointer(
     private val lowerTypePointer = coneType.constructor.lowerType?.createPointer(builder)
     private val isMarkedNullable = coneType.isMarkedNullable
     private val coneProjectionPointer = ConeTypeProjectionPointer(coneType.constructor.projection, builder)
-    private val constructorSupertypePointers = coneType.constructor.supertypes?.map { it.createPointer(builder) }
+
+    private val constructorSupertypePointers: List<ConeTypePointer<ConeKotlinType>>? = run {
+        val supertypes = coneType.constructor.supertypes ?: return@run null
+        val creatingSet = creatingPointers.get()
+        // Use identity to detect recursion during pointer creation
+        val identity = System.identityHashCode(coneType.constructor)
+        if (identity in creatingSet) {
+            // Break recursion by not storing supertypes for this captured type
+            return@run null
+        }
+        creatingSet.add(identity)
+        try {
+            supertypes.map { it.createPointer(builder) }
+        } finally {
+            creatingSet.remove(identity)
+        }
+    }
 
     private val typeParameterSymbolPointer: KaSymbolPointer<KaTypeParameterSymbol>? = run {
         val typeParameterLookupTag = coneType.constructor.typeParameterMarker as? ConeTypeParameterLookupTag

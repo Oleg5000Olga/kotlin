@@ -45,6 +45,7 @@ abstract class AbstractTypePointerConsistencyTest : AbstractAnalysisApiBasedTest
         val afterString = analyzeForTest(restoreAt) {
             val restoredType = typePointer.restore()
             if (restoredType != null) {
+                restoredType.approximateToDenotableSubtypeOrSelf()
                 renderer.renderType(useSiteSession, restoredType)
             } else {
                 "Type pointer restoration failed"
